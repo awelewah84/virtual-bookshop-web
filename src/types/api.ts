@@ -99,6 +99,8 @@ export interface StaffLoginResponse extends ApiRecord {
 export interface StaffUser extends ApiRecord {
   id?: string
   staffId?: string
+  firstName?: string
+  lastName?: string
   isActive?: boolean
   lastLogin?: string | null
   createdAt?: string
@@ -130,6 +132,7 @@ export interface SalesSummaryRow extends ApiRecord {
   grossSales?: number
   from?: string
   to?: string
+  paymentReceivedBy?: string
 }
 
 export interface SalesSummaryTotals extends ApiRecord {
@@ -143,6 +146,18 @@ export interface SalesSummaryDailyRow extends ApiRecord {
   ordersCount?: number
   itemsCount?: number
   grossSales?: number
+  reservationNos?: string[]
+  byStaff?: SalesSummaryByStaffRow[]
+}
+
+export interface SalesSummaryByStaffRow extends ApiRecord {
+  staffId?: string
+  firstName?: string
+  lastName?: string
+  ordersCount?: number
+  itemsCount?: number
+  grossSales?: number
+  reservationNos?: string[]
 }
 
 export interface SalesSummaryResponse extends ApiRecord {

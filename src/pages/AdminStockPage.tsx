@@ -48,84 +48,89 @@ export function AdminStockPage() {
   return (
     <div className="panel-grid">
       <section className="panel">
-        <h2>Update Stock</h2>
-        <p className="panel-note">Admin-only stock update endpoint: PATCH /api/catalog/{'{bookId}'}/stock</p>
+        <h2>Stock Operations</h2>
+        <p className="panel-note">Update stock and submit restock requests, then review the queue below.</p>
 
-        <form onSubmit={stockForm.handleSubmit((values) => stockMutation.mutate(values))}>
-          <label className="field">
-            <span>Book</span>
-            <select {...stockForm.register('bookId')}>
-              <option value="">Select a book</option>
-              {(catalogQuery.data ?? []).map((book) => {
-                const id = String(book.bookId ?? book.id ?? '')
-                const title = String(book.title ?? 'Untitled')
-                return (
-                  <option key={id} value={id}>
-                    {title}
-                  </option>
-                )
-              })}
-            </select>
-            <small>{stockForm.formState.errors.bookId?.message ?? '\u00a0'}</small>
-          </label>
+        <div className="stock-forms-grid">
+          <div>
+            <h3>Update Stock</h3>
+            <p className="panel-note">Admin-only stock update endpoint: PATCH /api/catalog/{'{bookId}'}/stock</p>
 
-          <label className="field">
-            <span>New Stock Count</span>
-            <input type="number" min={0} {...stockForm.register('stock', { valueAsNumber: true })} />
-            <small>{stockForm.formState.errors.stock?.message ?? '\u00a0'}</small>
-          </label>
+            <form onSubmit={stockForm.handleSubmit((values) => stockMutation.mutate(values))}>
+              <label className="field">
+                <span>Book</span>
+                <select {...stockForm.register('bookId')}>
+                  <option value="">Select a book</option>
+                  {(catalogQuery.data ?? []).map((book) => {
+                    const id = String(book.bookId ?? book.id ?? '')
+                    const title = String(book.title ?? 'Untitled')
+                    return (
+                      <option key={id} value={id}>
+                        {title}
+                      </option>
+                    )
+                  })}
+                </select>
+                <small>{stockForm.formState.errors.bookId?.message ?? '\u00a0'}</small>
+              </label>
 
-          <button type="submit" disabled={stockMutation.isPending}>
-            {stockMutation.isPending ? 'Updating...' : 'Update Stock'}
-          </button>
-          {stockMutation.isSuccess && <div className="success-banner">Catalog stock was updated.</div>}
-          {stockMutation.isError && <div className="error-banner">{stockMutation.error.message}</div>}
-        </form>
-      </section>
+              <label className="field">
+                <span>New Stock Count</span>
+                <input type="number" min={0} {...stockForm.register('stock', { valueAsNumber: true })} />
+                <small>{stockForm.formState.errors.stock?.message ?? '\u00a0'}</small>
+              </label>
 
-      <section className="panel">
-        <h2>Create Restock Request</h2>
-        <p className="panel-note">Operations flow for warehouse replenishment.</p>
+              <button type="submit" disabled={stockMutation.isPending}>
+                {stockMutation.isPending ? 'Updating...' : 'Update Stock'}
+              </button>
+              {stockMutation.isSuccess && <div className="success-banner">Catalog stock was updated.</div>}
+              {stockMutation.isError && <div className="error-banner">{stockMutation.error.message}</div>}
+            </form>
+          </div>
 
-        <form onSubmit={restockForm.handleSubmit((values) => restockMutation.mutate(values))}>
-          <label className="field">
-            <span>Book</span>
-            <select {...restockForm.register('bookId')}>
-              <option value="">Select a book</option>
-              {(catalogQuery.data ?? []).map((book) => {
-                const id = String(book.bookId ?? book.id ?? '')
-                const title = String(book.title ?? 'Untitled')
-                return (
-                  <option key={id} value={id}>
-                    {title}
-                  </option>
-                )
-              })}
-            </select>
-            <small>{restockForm.formState.errors.bookId?.message ?? '\u00a0'}</small>
-          </label>
+          <div>
+            <h3>Restock Request</h3>
+            <p className="panel-note">Operations flow for warehouse replenishment.</p>
 
-          <label className="field">
-            <span>Quantity</span>
-            <input type="number" min={1} {...restockForm.register('quantity', { valueAsNumber: true })} />
-            <small>{restockForm.formState.errors.quantity?.message ?? '\u00a0'}</small>
-          </label>
+            <form onSubmit={restockForm.handleSubmit((values) => restockMutation.mutate(values))}>
+              <label className="field">
+                <span>Book</span>
+                <select {...restockForm.register('bookId')}>
+                  <option value="">Select a book</option>
+                  {(catalogQuery.data ?? []).map((book) => {
+                    const id = String(book.bookId ?? book.id ?? '')
+                    const title = String(book.title ?? 'Untitled')
+                    return (
+                      <option key={id} value={id}>
+                        {title}
+                      </option>
+                    )
+                  })}
+                </select>
+                <small>{restockForm.formState.errors.bookId?.message ?? '\u00a0'}</small>
+              </label>
 
-          <label className="field">
-            <span>Reason (optional)</span>
-            <input type="text" {...restockForm.register('reason')} placeholder="Promotion demand increase" />
-            <small>{restockForm.formState.errors.reason?.message ?? '\u00a0'}</small>
-          </label>
+              <label className="field">
+                <span>Quantity</span>
+                <input type="number" min={1} {...restockForm.register('quantity', { valueAsNumber: true })} />
+                <small>{restockForm.formState.errors.quantity?.message ?? '\u00a0'}</small>
+              </label>
 
-          <button type="submit" disabled={restockMutation.isPending}>
-            {restockMutation.isPending ? 'Submitting...' : 'Create Restock Request'}
-          </button>
-          {restockMutation.isSuccess && <div className="success-banner">Restock request was added to queue.</div>}
-          {restockMutation.isError && <div className="error-banner">{restockMutation.error.message}</div>}
-        </form>
-      </section>
+              <label className="field">
+                <span>Reason (optional)</span>
+                <input type="text" {...restockForm.register('reason')} placeholder="Promotion demand increase" />
+                <small>{restockForm.formState.errors.reason?.message ?? '\u00a0'}</small>
+              </label>
 
-      <section className="panel">
+              <button type="submit" disabled={restockMutation.isPending}>
+                {restockMutation.isPending ? 'Submitting...' : 'Submit Restock Request'}
+              </button>
+              {restockMutation.isSuccess && <div className="success-banner">Restock request was added to queue.</div>}
+              {restockMutation.isError && <div className="error-banner">{restockMutation.error.message}</div>}
+            </form>
+          </div>
+        </div>
+
         <h2>Restock Queue</h2>
         <p className="panel-note">Latest restock requests for operations follow-up.</p>
 

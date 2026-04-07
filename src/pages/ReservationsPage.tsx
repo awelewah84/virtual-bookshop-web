@@ -157,10 +157,10 @@ export function ReservationsPage() {
         </p>
 
         <div className="reservation-actions">
-          <Link className="button-link reservation-btn" to="/admin/reservations/new">
+          <Link className="button-link reservation-btn reservation-top-btn reservation-top-btn-active" to="/admin/reservations/new">
             Create New Reservation
           </Link>
-          <Link className="button-link ghost-link reservation-btn" to="/reserve">
+          <Link className="button-link ghost-link reservation-btn reservation-top-btn" to="/reserve">
             Open Customer Booking Page
           </Link>
           <label className="field reservation-filter-field">
@@ -189,7 +189,7 @@ export function ReservationsPage() {
                 <th>Items</th>
                 <th>Total</th>
                 <th>Status</th>
-                <th>Paid By</th>
+                <th>PaymentReceived By</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>

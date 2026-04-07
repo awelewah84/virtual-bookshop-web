@@ -85,7 +85,7 @@ export function BookTable({ books, selectedBookId, onSelectBook }: Props) {
           <thead>
             <tr>
               <th>Book</th>
-              <th>Identifier</th>
+              <th>Author</th>
               <th>Stock</th>
               <th>Price</th>
             </tr>
@@ -135,11 +135,10 @@ export function BookTable({ books, selectedBookId, onSelectBook }: Props) {
                       />
                       <div>
                         <strong>{title}</strong>
-                        <small>{author}</small>
                       </div>
                     </div>
                   </td>
-                  <td>{id}</td>
+                  <td>{author}</td>
                   <td>{stock}</td>
                   <td>{price}</td>
                 </tr>

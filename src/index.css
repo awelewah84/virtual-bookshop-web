@@ -242,6 +242,30 @@ button:hover:not(:disabled),
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
+.panel-span-full {
+  grid-column: 1 / -1;
+}
+
+.stock-forms-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-bottom: 1rem;
+}
+
+.stock-forms-grid > div {
+  border: 3px solid rgba(31, 35, 51, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 0.8rem;
+}
+
+.stock-forms-grid h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+
 .catalog-layout {
   display: grid;
   gap: 0.9rem;
@@ -255,6 +279,13 @@ button:hover:not(:disabled),
   justify-content: space-between;
   gap: 0.8rem;
   margin-bottom: 0.8rem;
+}
+
+.catalog-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .modal-backdrop {
@@ -553,7 +584,7 @@ pre {
 .detail-list {
   margin: 0 0 1rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.6rem;
 }
 
@@ -573,6 +604,16 @@ pre {
 .detail-list dd {
   margin: 0.25rem 0 0;
   font-weight: 600;
+}
+
+.detail-id-value {
+  font-size: 0.84rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.catalog-thumbnail-form {
+  padding-top: 0.65rem;
 }
 
 .line-items {
@@ -600,6 +641,27 @@ pre {
 .reservation-btn {
   padding: 0.46rem 0.9rem;
   font-size: 0.9rem;
+}
+
+.reservation-top-btn {
+  padding: 0.48rem 0.9rem;
+  font-size: 0.92rem;
+  line-height: 1;
+  border-color: rgba(89, 60, 32, 0.2);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--ink);
+}
+
+.reservation-top-btn.ghost-link {
+  border-color: rgba(89, 60, 32, 0.2);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--ink);
+}
+
+.reservation-top-btn-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
 }
 
 .reservation-filter-field {
@@ -630,6 +692,17 @@ pre {
   gap: 0.6rem;
   flex-wrap: wrap;
   margin-bottom: 0.85rem;
+}
+
+.reconciliation-drilldown {
+  border: 1px solid rgba(31, 35, 51, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.64);
+  padding: 0.65rem;
+}
+
+.reconciliation-drilldown p {
+  margin: 0 0 0.55rem;
 }
 
 .status-badge {

@@ -1,9 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useToast } from '../hooks/useToast'
-import { createBook, listCatalog, updateBook, updateBookStock } from '../lib/api'
+import { createBook, importCatalogFromExcel, listCatalog, updateBook, updateBookStock } from '../lib/api'
 import { formatCurrency } from '../lib/currency'
 import { createBookSchema, type CreateBookSchema } from '../lib/schemas'
 import { BookTable } from '../components/BookTable'
@@ -25,6 +25,7 @@ export function CatalogPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createThumbnail, setCreateThumbnail] = useState<File | null>(null)
   const [updateThumbnail, setUpdateThumbnail] = useState<File | null>(null)
+  const excelInputRef = useRef<HTMLInputElement | null>(null)
 
   const selectedBook = useMemo(() => {
     if (!selectedBookId) {
@@ -84,6 +85,19 @@ export function CatalogPage() {
     },
   })
 
+  const importCatalogMutation = useMutation({
+    mutationFn: async (file: File) => importCatalogFromExcel(file),
+    onSuccess: async (result) => {
+      const imported = typeof result.imported === 'number' ? result.imported : 0
+      const updated = typeof result.updated === 'number' ? result.updated : 0
+      toast.success(`Excel import complete. Imported: ${imported}, Updated: ${updated}.`)
+      await queryClient.invalidateQueries({ queryKey: ['catalog'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+
   const selectedId = selectedBook ? String(selectedBook.bookId ?? selectedBook.id ?? '') : ''
 
   const onSelectBook = (bookId: string) => {
@@ -110,9 +124,36 @@ export function CatalogPage() {
             <h2>Book Details</h2>
             <p className="panel-note">Click any listing to inspect details and update stock.</p>
           </div>
-          <button type="button" onClick={() => setIsCreateOpen(true)}>
-            Create Book
-          </button>
+          <div className="catalog-actions">
+            <input
+              ref={excelInputRef}
+              type="file"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (!file) {
+                  return
+                }
+
+                importCatalogMutation.mutate(file)
+                event.target.value = ''
+              }}
+              hidden
+            />
+
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => excelInputRef.current?.click()}
+              disabled={importCatalogMutation.isPending}
+            >
+              {importCatalogMutation.isPending ? 'Uploading Excel...' : 'Upload Stock (Excel)'}
+            </button>
+
+            <button type="button" onClick={() => setIsCreateOpen(true)}>
+              Create Book
+            </button>
+          </div>
         </div>
 
         {!selectedBook && <p>No book selected yet.</p>}
@@ -138,7 +179,7 @@ export function CatalogPage() {
               </div>
               <div>
                 <dt>Book ID</dt>
-                <dd>{selectedId}</dd>
+                <dd className="detail-id-value">{selectedId}</dd>
               </div>
               <div>
                 <dt>Price</dt>
@@ -180,6 +221,7 @@ export function CatalogPage() {
             </form>
 
             <form
+              className="catalog-thumbnail-form"
               onSubmit={(event) => {
                 event.preventDefault()
                 if (!selectedId || !updateThumbnail) {

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { exportSalesSummaryCsv, getSalesSummary, listStaffUsers } from '../lib/api'
 import { useToast } from '../hooks/useToast'
 import { formatCurrency } from '../lib/currency'
-import type { SalesSummaryRow } from '../types/api'
+import type { SalesSummaryByStaffRow, SalesSummaryRow } from '../types/api'
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10)
@@ -33,11 +33,21 @@ function mergeSalesSummaryRows(
   groupedRows: SalesSummaryRow[][],
   from: string | undefined,
   to: string | undefined,
+  selectedStaffIds: string[],
 ): SalesSummaryRow[] {
   let totalOrders = 0
   let totalItems = 0
   let totalGross = 0
-  const byDay = new Map<string, { ordersCount: number; itemsCount: number; grossSales: number }>()
+  const byDay = new Map<
+    string,
+    {
+      ordersCount: number
+      itemsCount: number
+      grossSales: number
+      reservationNos: Set<string>
+      byStaff: Map<string, SalesSummaryByStaffRow>
+    }
+  >()
 
   for (const rows of groupedRows) {
     for (const row of rows) {
@@ -59,10 +69,48 @@ function mergeSalesSummaryRows(
         continue
       }
 
-      const current = byDay.get(date) ?? { ordersCount: 0, itemsCount: 0, grossSales: 0 }
+      const current = byDay.get(date) ?? {
+        ordersCount: 0,
+        itemsCount: 0,
+        grossSales: 0,
+        reservationNos: new Set<string>(),
+        byStaff: new Map<string, SalesSummaryByStaffRow>(),
+      }
       current.ordersCount += toSafeNumber(row.ordersCount)
       current.itemsCount += toSafeNumber(row.itemsCount)
       current.grossSales += toSafeNumber(row.grossSales)
+
+      for (const reservationNo of Array.isArray(row.reservationNos) ? row.reservationNos : []) {
+        current.reservationNos.add(String(reservationNo))
+      }
+
+      const byStaffRows = Array.isArray(row.byStaff) ? row.byStaff : []
+      for (const byStaffRow of byStaffRows) {
+        const staffId = String(byStaffRow.staffId ?? '').trim()
+        if (!staffId) {
+          continue
+        }
+
+        const existing = current.byStaff.get(staffId)
+        const mergedReservationNos = new Set<string>(
+          (existing?.reservationNos ?? []).map((value) => String(value)),
+        )
+
+        for (const reservationNo of Array.isArray(byStaffRow.reservationNos) ? byStaffRow.reservationNos : []) {
+          mergedReservationNos.add(String(reservationNo))
+        }
+
+        current.byStaff.set(staffId, {
+          staffId,
+          firstName: byStaffRow.firstName,
+          lastName: byStaffRow.lastName,
+          ordersCount: toSafeNumber(existing?.ordersCount) + toSafeNumber(byStaffRow.ordersCount),
+          itemsCount: toSafeNumber(existing?.itemsCount) + toSafeNumber(byStaffRow.itemsCount),
+          grossSales: Number((toSafeNumber(existing?.grossSales) + toSafeNumber(byStaffRow.grossSales)).toFixed(2)),
+          reservationNos: [...mergedReservationNos],
+        })
+      }
+
       byDay.set(date, current)
     }
   }
@@ -75,11 +123,12 @@ function mergeSalesSummaryRows(
     grossSales: Number(totalGross.toFixed(2)),
     from: from ?? '',
     to: to ?? '',
+    paymentReceivedBy: selectedStaffIds.join('|'),
   }
 
   const dayRows = [...byDay.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([date, values]) => ({
+    .map(([date, values]): SalesSummaryRow => ({
       section: 'DAY',
       date,
       ordersCount: values.ordersCount,
@@ -87,6 +136,9 @@ function mergeSalesSummaryRows(
       grossSales: Number(values.grossSales.toFixed(2)),
       from: '',
       to: '',
+      paymentReceivedBy: selectedStaffIds.join('|'),
+      reservationNos: [...values.reservationNos],
+      byStaff: [...values.byStaff.values()],
     }))
 
   return [totalRow, ...dayRows]
@@ -136,6 +188,7 @@ export function AdminReconciliationPage() {
   const [to, setTo] = useState(todayIsoDate())
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([])
   const [isExporting, setIsExporting] = useState(false)
+  const [expandedDays, setExpandedDays] = useState<string[]>([])
 
   const staffUsersQuery = useQuery({ queryKey: ['staff-users'], queryFn: listStaffUsers })
 
@@ -144,7 +197,71 @@ export function AdminReconciliationPage() {
     [selectedStaffIds],
   )
 
-  const selectedStaffLabel = normalizedSelectedStaffIds.length > 0 ? normalizedSelectedStaffIds.join(', ') : 'All staff'
+  const staffLabelById = useMemo(() => {
+    const map = new Map<string, string>()
+
+    for (const user of staffUsersQuery.data ?? []) {
+      const staffId = String(user.staffId ?? '').trim()
+      if (!staffId) {
+        continue
+      }
+
+      const firstName = typeof user.firstName === 'string' ? user.firstName.trim() : ''
+      const lastName = typeof user.lastName === 'string' ? user.lastName.trim() : ''
+      const joinedName = `${firstName} ${lastName}`.trim()
+
+      const displayCandidate =
+        joinedName ||
+        (typeof user.name === 'string'
+          ? user.name
+          : typeof user.displayName === 'string'
+            ? user.displayName
+            : typeof user.fullName === 'string'
+              ? user.fullName
+              : '')
+
+      const name = displayCandidate.trim()
+      map.set(staffId, name && name.toLowerCase() !== staffId.toLowerCase() ? `${name} (${staffId})` : staffId)
+    }
+
+    return map
+  }, [staffUsersQuery.data])
+
+  const formatStaffLabel = (staffValue: string): string => {
+    const trimmed = staffValue.trim()
+    if (!trimmed) {
+      return '-'
+    }
+
+    const ids = trimmed.split('|').map((value) => value.trim()).filter(Boolean)
+    if (ids.length === 0) {
+      return '-'
+    }
+
+    return ids.map((id) => staffLabelById.get(id) ?? id).join(', ')
+  }
+
+  const formatByStaffRowName = (row: SalesSummaryByStaffRow): string => {
+    const staffId = String(row.staffId ?? '').trim()
+    const firstName = String(row.firstName ?? '').trim()
+    const lastName = String(row.lastName ?? '').trim()
+    const joined = `${firstName} ${lastName}`.trim()
+
+    if (!staffId) {
+      return joined || '-'
+    }
+
+    if (joined) {
+      return `${joined} (${staffId})`
+    }
+
+    return staffLabelById.get(staffId) ?? staffId
+  }
+
+  const selectedStaffLabel =
+    normalizedSelectedStaffIds.length > 0
+      ? normalizedSelectedStaffIds.map((id) => staffLabelById.get(id) ?? id).join(', ')
+      : 'All staff'
 
   const filters = useMemo(
     () => ({
@@ -172,7 +289,7 @@ export function AdminReconciliationPage() {
         ),
       )
 
-      return mergeSalesSummaryRows(groupedRows, filters.from, filters.to)
+      return mergeSalesSummaryRows(groupedRows, filters.from, filters.to, normalizedSelectedStaffIds)
     },
   })
 
@@ -266,38 +383,69 @@ export function AdminReconciliationPage() {
           <small>{'\u00a0'}</small>
         </label>
 
-        <label className="field">
-          <span>Payment Received By (Staff)</span>
-          <select
-            multiple
-            value={normalizedSelectedStaffIds}
-            onChange={(event) => {
-              const values = Array.from(event.target.selectedOptions).map((option) => option.value)
-              setSelectedStaffIds(values)
-            }}
-            aria-label="Filter by staff"
-            size={Math.min(6, Math.max(3, (staffUsersQuery.data ?? []).length))}
-          >
-            {(staffUsersQuery.data ?? []).map((user, index) => {
-              const staffId = String(user.staffId ?? `staff-${index + 1}`)
-              const status = user.isActive === false ? ' (Inactive)' : ''
-              return (
-                <option key={staffId} value={staffId}>
-                  {staffId}
-                  {status}
-                </option>
-              )
-            })}
-          </select>
-          <small>{'\u00a0'}</small>
-        </label>
-
         <button type="button" onClick={handleExport} disabled={isExporting || summaryQuery.isFetching}>
           {isExporting ? 'Exporting...' : 'Export CSV'}
         </button>
       </div>
 
-      <p className="panel-note">Hold Ctrl/Cmd to select multiple staff members.</p>
+      <h3>Staff Users</h3>
+      <p className="panel-note">Select one or more staff users to filter payment records.</p>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Select</th>
+              <th>Name</th>
+              <th>Staff ID</th>
+              <th>Status</th>
+              <th>Last Login</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(staffUsersQuery.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={5}>No staff users found.</td>
+              </tr>
+            )}
+
+            {(staffUsersQuery.data ?? []).map((user, index) => {
+              const staffId = String(user.staffId ?? `staff-${index + 1}`)
+              const firstName = String(user.firstName ?? '').trim()
+              const lastName = String(user.lastName ?? '').trim()
+              const displayName = `${firstName} ${lastName}`.trim() || '-'
+              const isActive = user.isActive !== false
+              const checked = normalizedSelectedStaffIds.includes(staffId)
+              const lastLogin = user.lastLogin ? new Date(String(user.lastLogin)).toLocaleString() : '-'
+
+              return (
+                <tr key={staffId}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedStaffIds((prev) => {
+                          if (prev.includes(staffId)) {
+                            return prev.filter((value) => value !== staffId)
+                          }
+
+                          return [...prev, staffId]
+                        })
+                      }}
+                      aria-label={`Select ${staffId}`}
+                    />
+                  </td>
+                  <td>{displayName}</td>
+                  <td>{staffId}</td>
+                  <td>{isActive ? 'Active' : 'Inactive'}</td>
+                  <td>{lastLogin}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
 
       <p className="panel-note">
         Staff payment filter: {selectedStaffLabel}
@@ -312,6 +460,7 @@ export function AdminReconciliationPage() {
           <thead>
             <tr>
               <th>Section</th>
+              <th>Staff Name</th>
               <th>Date</th>
               <th>Orders</th>
               <th>Items</th>
@@ -323,31 +472,108 @@ export function AdminReconciliationPage() {
           <tbody>
             {(summaryQuery.data ?? []).length === 0 && !summaryQuery.isFetching && (
               <tr>
-                <td colSpan={7}>No summary rows for this filter window.</td>
+                <td colSpan={8}>No summary rows for this filter window.</td>
               </tr>
             )}
 
             {(summaryQuery.data ?? []).map((row, index) => {
               const section = String(row.section ?? '-').toUpperCase()
               const date = String(row.date ?? '-')
+              const isDayRow = section === 'DAY'
+              const dayKey = `${date}-${index}`
+              const isExpanded = expandedDays.includes(dayKey)
               const ordersCount = typeof row.ordersCount === 'number' ? row.ordersCount : '-'
               const itemsCount = typeof row.itemsCount === 'number' ? row.itemsCount : '-'
               const grossSales = typeof row.grossSales === 'number' ? row.grossSales : undefined
               const rangeFrom = String(row.from ?? filters.from ?? '-')
               const rangeTo = String(row.to ?? filters.to ?? '-')
+              const staffRaw =
+                typeof row.paymentReceivedBy === 'string' && row.paymentReceivedBy.trim().length > 0
+                  ? row.paymentReceivedBy
+                  : normalizedSelectedStaffIds.length > 0
+                    ? normalizedSelectedStaffIds.join('|')
+                    : ''
 
               return (
-                <tr key={`${section}-${date}-${index}`}>
-                  <td>
-                    <span className={section === 'TOTAL' ? 'status-badge status-completed' : 'status-badge'}>{section}</span>
-                  </td>
-                  <td>{date}</td>
-                  <td>{ordersCount}</td>
-                  <td>{itemsCount}</td>
-                  <td>{formatCurrency(grossSales)}</td>
-                  <td>{rangeFrom}</td>
-                  <td>{rangeTo}</td>
-                </tr>
+                <>
+                  <tr key={`${section}-${date}-${index}`}>
+                    <td>
+                      <span className={section === 'TOTAL' ? 'status-badge status-completed' : 'status-badge'}>{section}</span>
+                    </td>
+                    <td>{formatStaffLabel(staffRaw)}</td>
+                    <td>
+                      {date}
+                      {isDayRow && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => {
+                            setExpandedDays((prev) =>
+                              prev.includes(dayKey) ? prev.filter((value) => value !== dayKey) : [...prev, dayKey],
+                            )
+                          }}
+                        >
+                          {isExpanded ? 'Hide details' : 'View details'}
+                        </button>
+                      )}
+                    </td>
+                    <td>{ordersCount}</td>
+                    <td>{itemsCount}</td>
+                    <td>{formatCurrency(grossSales)}</td>
+                    <td>{rangeFrom}</td>
+                    <td>{rangeTo}</td>
+                  </tr>
+
+                  {isDayRow && isExpanded && (
+                    <tr key={`${dayKey}-details`}>
+                      <td colSpan={8}>
+                        <div className="reconciliation-drilldown">
+                          <p>
+                            <strong>Reservation Nos:</strong>{' '}
+                            {Array.isArray(row.reservationNos) && row.reservationNos.length > 0
+                              ? row.reservationNos.join(', ')
+                              : '-'}
+                          </p>
+
+                          <div className="table-wrap">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Staff</th>
+                                  <th>Orders</th>
+                                  <th>Items</th>
+                                  <th>Gross Sales</th>
+                                  <th>Reservation Nos</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(Array.isArray(row.byStaff) ? row.byStaff : []).length === 0 && (
+                                  <tr>
+                                    <td colSpan={5}>No by-staff details for this day.</td>
+                                  </tr>
+                                )}
+
+                                {(Array.isArray(row.byStaff) ? row.byStaff : []).map((entry, entryIndex) => (
+                                  <tr key={`${dayKey}-staff-${entryIndex}`}>
+                                    <td>{formatByStaffRowName(entry)}</td>
+                                    <td>{toSafeNumber(entry.ordersCount)}</td>
+                                    <td>{toSafeNumber(entry.itemsCount)}</td>
+                                    <td>{formatCurrency(entry.grossSales)}</td>
+                                    <td>
+                                      {Array.isArray(entry.reservationNos) && entry.reservationNos.length > 0
+                                        ? entry.reservationNos.join(', ')
+                                        : '-'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               )
             })}
           </tbody>

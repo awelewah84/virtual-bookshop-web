@@ -202,6 +202,26 @@ export async function createRestockRequest(payload: CreateRestockRequestInput): 
   })
 }
 
+export interface CatalogImportResult {
+  message?: string
+  imported?: number
+  updated?: number
+}
+
+export async function importCatalogFromExcel(file: File, sheetName?: string): Promise<CatalogImportResult> {
+  const body = new FormData()
+  body.append('file', file)
+
+  if (sheetName && sheetName.trim().length > 0) {
+    body.append('sheetName', sheetName.trim())
+  }
+
+  return requestJson<CatalogImportResult>('/api/catalog/import/excel', {
+    method: 'POST',
+    body,
+  })
+}
+
 function makeQueryString(filters?: SalesSummaryFilters): string {
   const params = new URLSearchParams()
 
@@ -232,6 +252,7 @@ export async function getSalesSummary(filters?: SalesSummaryFilters): Promise<Sa
     grossSales: typeof data.totals?.grossSales === 'number' ? data.totals.grossSales : 0,
     from: data.filters?.from ?? filters?.from ?? '',
     to: data.filters?.to ?? filters?.to ?? '',
+    paymentReceivedBy: data.filters?.paymentReceivedBy ?? filters?.paymentReceivedBy ?? '',
   }
 
   const dayRows = (data.byDay ?? []).map((day: SalesSummaryDailyRow) => ({
@@ -242,6 +263,9 @@ export async function getSalesSummary(filters?: SalesSummaryFilters): Promise<Sa
     grossSales: typeof day.grossSales === 'number' ? day.grossSales : 0,
     from: '',
     to: '',
+    paymentReceivedBy: data.filters?.paymentReceivedBy ?? filters?.paymentReceivedBy ?? '',
+      reservationNos: Array.isArray(day.reservationNos) ? day.reservationNos.map((value) => String(value)) : [],
+      byStaff: Array.isArray(day.byStaff) ? day.byStaff : [],
   }))
 
   return [totalsRow, ...dayRows]

@@ -128,9 +128,9 @@ export function StaffUsersPage() {
         </form>
       </section>
 
-      <section className="panel">
+      <section className="panel panel-span-full">
         <h2>Staff Users</h2>
-        <p className="panel-note">Protected endpoints: GET/activate/deactivate staff users.</p>
+        <p className="panel-note">Current staff directory and account status.</p>
 
         {usersQuery.isError && <div className="error-banner">{usersQuery.error.message}</div>}
 
@@ -139,6 +139,7 @@ export function StaffUsersPage() {
             <thead>
               <tr>
                 <th>Staff ID</th>
+                <th>Name</th>
                 <th>Status</th>
                 <th>Last Login</th>
                 <th>Actions</th>
@@ -147,7 +148,7 @@ export function StaffUsersPage() {
             <tbody>
               {(usersQuery.data ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={4}>No staff users found.</td>
+                  <td colSpan={5}>No staff users found.</td>
                 </tr>
               )}
 
@@ -155,10 +156,14 @@ export function StaffUsersPage() {
                 const staffId = String(user.staffId ?? `staff-${index}`)
                 const isActive = Boolean(user.isActive)
                 const lastLogin = user.lastLogin ? new Date(String(user.lastLogin)).toLocaleString() : '-'
+                const firstName = String(user.firstName ?? '').trim()
+                const lastName = String(user.lastName ?? '').trim()
+                const displayName = `${firstName} ${lastName}`.trim() || '-'
 
                 return (
                   <tr key={staffId}>
                     <td>{staffId}</td>
+                    <td>{displayName}</td>
                     <td>{isActive ? 'Active' : 'Inactive'}</td>
                     <td>{lastLogin}</td>
                     <td>
@@ -188,6 +193,7 @@ export function StaffUsersPage() {
           </table>
         </div>
       </section>
+
     </div>
   )
 }
