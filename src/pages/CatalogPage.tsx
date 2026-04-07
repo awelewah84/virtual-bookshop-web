@@ -3,7 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useToast } from '../hooks/useToast'
-import { createBook, importCatalogFromExcel, listCatalog, updateBook, updateBookStock } from '../lib/api'
+import {
+  createBook,
+  getHealth,
+  importCatalogFromExcel,
+  listCatalog,
+  listReservations,
+  listRestockRequests,
+  updateBook,
+  updateBookStock,
+} from '../lib/api'
 import { formatCurrency } from '../lib/currency'
 import { createBookSchema, type CreateBookSchema } from '../lib/schemas'
 import { BookTable } from '../components/BookTable'
@@ -16,10 +25,17 @@ const bookFieldMeta: Array<{ name: keyof CreateBookSchema; label: string; type: 
   { name: 'stock', label: 'Initial Stock', type: 'number' },
 ]
 
+function asText(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+}
+
 export function CatalogPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const healthQuery = useQuery({ queryKey: ['health'], queryFn: getHealth })
   const catalogQuery = useQuery({ queryKey: ['catalog'], queryFn: listCatalog })
+  const reservationsQuery = useQuery({ queryKey: ['reservations'], queryFn: listReservations })
+  const restockQuery = useQuery({ queryKey: ['restock'], queryFn: listRestockRequests })
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null)
   const [stockDraft, setStockDraft] = useState<number>(0)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -113,12 +129,36 @@ export function CatalogPage() {
   }
 
   return (
-    <div className="catalog-layout">
-      {catalogQuery.isError && <div className="error-banner">Catalog load failed: {catalogQuery.error.message}</div>}
+    <>
+      <section className="stats-grid">
+        <article>
+          <h2>API Health</h2>
+          <p>
+            {healthQuery.isLoading && 'Checking...'}
+            {healthQuery.isError && `Error: ${healthQuery.error.message}`}
+            {healthQuery.isSuccess && asText(healthQuery.data)}
+          </p>
+        </article>
+        <article>
+          <h2>Catalog Size</h2>
+          <p>{catalogQuery.data?.length ?? 0} books</p>
+        </article>
+        <article>
+          <h2>Reservations</h2>
+          <p>{reservationsQuery.data?.length ?? 0} active</p>
+        </article>
+        <article>
+          <h2>Restock Requests</h2>
+          <p>{restockQuery.data?.length ?? 0} queued</p>
+        </article>
+      </section>
 
-      <BookTable books={catalogQuery.data ?? []} selectedBookId={selectedBookId} onSelectBook={onSelectBook} />
+      <div className="catalog-layout">
+        {catalogQuery.isError && <div className="error-banner">Catalog load failed: {catalogQuery.error.message}</div>}
 
-      <section className="panel">
+        <BookTable books={catalogQuery.data ?? []} selectedBookId={selectedBookId} onSelectBook={onSelectBook} />
+
+        <section className="panel">
         <div className="catalog-detail-header">
           <div>
             <h2>Book Details</h2>
@@ -249,17 +289,17 @@ export function CatalogPage() {
             </form>
           </>
         )}
-      </section>
+        </section>
 
-      {isCreateOpen && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setIsCreateOpen(false)}>
-          <section
-            className="panel modal-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Create book"
-            onClick={(event) => event.stopPropagation()}
-          >
+        {isCreateOpen && (
+          <div className="modal-backdrop" role="presentation" onClick={() => setIsCreateOpen(false)}>
+            <section
+              className="panel modal-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Create book"
+              onClick={(event) => event.stopPropagation()}
+            >
             <div className="catalog-detail-header">
               <div>
                 <h2>Add New Book</h2>
@@ -305,9 +345,10 @@ export function CatalogPage() {
               </button>
               {createBookMutation.isError && <div className="error-banner">{createBookMutation.error.message}</div>}
             </form>
-          </section>
-        </div>
-      )}
-    </div>
+            </section>
+          </div>
+        )}
+      </div>
+    </>
   )
 }

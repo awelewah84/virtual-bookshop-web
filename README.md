@@ -41,6 +41,12 @@ Example:
 $env:VITE_API_BASE_URL="http://localhost:4000"; npm run dev
 ```
 
+Customer reservation hours behavior:
+
+- Must be positive.
+- If omitted, defaults to 24 hours in the UI.
+- Backend is the source of truth for max reservation-hours limits.
+
 ## Run Locally
 
 ```powershell

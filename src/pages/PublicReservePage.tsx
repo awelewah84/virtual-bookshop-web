@@ -7,6 +7,8 @@ import { formatCurrency } from '../lib/currency'
 import { createPublicReservationSchema, type CreatePublicReservationSchema } from '../lib/schemas'
 import { BookThumbnail } from '../components/BookThumbnail'
 
+const DEFAULT_CUSTOMER_RESERVATION_HOURS = 24
+
 export function PublicReservePage() {
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -14,7 +16,7 @@ export function PublicReservePage() {
 
   const form = useForm<CreatePublicReservationSchema>({
     resolver: zodResolver(createPublicReservationSchema),
-    defaultValues: { customerName: '', email: '', bookIds: [''], reservationHours: 24 },
+    defaultValues: { customerName: '', email: '', bookIds: [''], reservationHours: DEFAULT_CUSTOMER_RESERVATION_HOURS },
   })
 
   const selectedBookIds = useWatch({ control: form.control, name: 'bookIds' }) ?? ['']
@@ -27,10 +29,15 @@ export function PublicReservePage() {
         customerName: values.customerName,
         customerEmail: values.email,
         bookIds: values.bookIds,
-        reservationHours: values.reservationHours,
+        reservationHours: values.reservationHours ?? DEFAULT_CUSTOMER_RESERVATION_HOURS,
       }),
     onSuccess: async () => {
-      form.reset({ customerName: '', email: '', bookIds: [''], reservationHours: 24 })
+      form.reset({
+        customerName: '',
+        email: '',
+        bookIds: [''],
+        reservationHours: DEFAULT_CUSTOMER_RESERVATION_HOURS,
+      })
       toast.success('Reservation submitted. Check your email for next steps.')
       await queryClient.invalidateQueries({ queryKey: ['reservations'] })
     },
@@ -115,8 +122,25 @@ export function PublicReservePage() {
 
           <label className="field">
             <span>Reservation Hours (optional)</span>
-            <input type="number" min={1} step="1" {...form.register('reservationHours', { valueAsNumber: true })} />
-            <small>{form.formState.errors.reservationHours?.message ?? '\u00a0'}</small>
+            <input
+              type="number"
+              min={1}
+              step="1"
+              {...form.register('reservationHours', {
+                setValueAs: (value) => {
+                  if (value === '' || value === null || value === undefined) {
+                    return undefined
+                  }
+
+                  const parsed = Number(value)
+                  return Number.isFinite(parsed) ? parsed : undefined
+                },
+              })}
+            />
+            <small>
+              {form.formState.errors.reservationHours?.message ??
+                `Leave blank for default ${DEFAULT_CUSTOMER_RESERVATION_HOURS}h.`}
+            </small>
           </label>
 
           <button type="submit" disabled={createMutation.isPending}>

@@ -4,7 +4,6 @@ import { ProtectedRoute } from './app/ProtectedRoute'
 import { AdminReconciliationPage } from './pages/AdminReconciliationPage'
 import { AdminStockPage } from './pages/AdminStockPage'
 import { CatalogPage } from './pages/CatalogPage'
-import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
 import { PublicCatalogPage } from './pages/PublicCatalogPage'
 import { PublicReservePage } from './pages/PublicReservePage'
@@ -16,12 +15,13 @@ function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<HomePage />} />
+        <Route index element={<PublicCatalogPage />} />
         <Route path="catalog" element={<PublicCatalogPage />} />
         <Route path="reserve" element={<PublicReservePage />} />
         <Route path="login" element={<LoginPage />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path="admin" element={<Navigate to="/admin/catalog" replace />} />
           <Route path="admin/catalog" element={<CatalogPage />} />
           <Route path="admin/reservations" element={<ReservationsPage />} />
           <Route path="admin/reservations/new" element={<ReservationCreatePage />} />

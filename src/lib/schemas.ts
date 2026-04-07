@@ -18,7 +18,10 @@ export const createPublicReservationSchema = z.object({
   customerName: z.string().min(2, 'Customer name is required'),
   email: z.string().email('Enter a valid email address'),
   bookIds: z.array(z.string().min(1, 'Select a book')).min(1, 'At least one book is required').max(5, 'Maximum 5 books'),
-  reservationHours: z.number().positive('Hours must be greater than 0').optional(),
+  reservationHours: z
+    .number()
+    .positive('Reservation hours must be positive.')
+    .optional(),
 })
 
 export const updateReservationAdminSchema = z.object({
