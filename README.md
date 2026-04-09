@@ -65,6 +65,27 @@ npm run build
 npm run preview
 ```
 
+## Deployment (Render)
+
+This app uses React Router with browser history. To support page refresh on nested routes (for example `/admin/catalog`), Render must rewrite all paths to `index.html`.
+
+If deploying via blueprint, this repository already includes `render.yaml` with the required rewrite:
+
+```yaml
+routes:
+	- type: rewrite
+		source: /*
+		destination: /index.html
+```
+
+If your Render service was created manually (without blueprint):
+
+1. Open your service in the Render dashboard.
+2. Go to Redirects/Rewrites.
+3. Add a rewrite rule: source `/*` -> destination `/index.html` (Rewrite/200).
+
+Without this rewrite, direct URL entry or browser refresh on nested pages will return a 404.
+
 ## Current Features
 
 - Route-based pages using React Router
