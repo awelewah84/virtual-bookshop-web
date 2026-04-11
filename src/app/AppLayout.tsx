@@ -4,12 +4,11 @@ import { useAuth } from '../hooks/useAuth'
 
 const publicNavItems = [
   { to: '/', label: 'Book Collection', end: true },
-  { to: '/reserve', label: 'Reserve a Book' },
 ]
 
 const adminNavItems = [
   { to: '/admin/catalog', label: 'Admin Catalog' },
-  { to: '/admin/reservations', label: 'Reservations' },
+  { to: '/admin/reservations', label: 'Orders' },
   { to: '/admin/stock', label: 'Admin Stock' },
   { to: '/admin/reconciliation', label: 'Reconciliation' },
   { to: '/admin/staff-users', label: 'Staff Users' },

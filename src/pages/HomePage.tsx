@@ -36,7 +36,7 @@ export function HomePage() {
         <p>{catalog.data?.length ?? 0} books</p>
       </article>
       <article>
-        <h2>Reservations</h2>
+        <h2>Orders</h2>
         <p>{isAuthenticated ? `${reservations.data?.length ?? 0} active` : 'Login required'}</p>
       </article>
       <article>

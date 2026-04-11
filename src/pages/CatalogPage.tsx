@@ -144,7 +144,7 @@ export function CatalogPage() {
           <p>{catalogQuery.data?.length ?? 0} books</p>
         </article>
         <article>
-          <h2>Reservations</h2>
+          <h2>Orders</h2>
           <p>{reservationsQuery.data?.length ?? 0} active</p>
         </article>
         <article>

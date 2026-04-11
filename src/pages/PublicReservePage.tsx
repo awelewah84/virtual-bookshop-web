@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useToast } from '../hooks/useToast'
 import { createReservation, listCatalog } from '../lib/api'
@@ -20,6 +21,48 @@ export function PublicReservePage() {
   })
 
   const selectedBookIds = useWatch({ control: form.control, name: 'bookIds' }) ?? ['']
+  const [bookSearchTerms, setBookSearchTerms] = useState<string[]>([''])
+
+  const catalogOptions = useMemo(
+    () =>
+      (catalogQuery.data ?? []).map((book) => {
+        const id = String(book.bookId ?? book.id ?? '')
+        const title = String(book.title ?? 'Untitled')
+        const author = String(book.author ?? 'Unknown author')
+        return {
+          id,
+          label: `${title} - ${author} (#${id})`,
+        }
+      }),
+    [catalogQuery.data],
+  )
+
+  const getSearchTerm = (index: number) => bookSearchTerms[index] ?? ''
+
+  const setSearchTerm = (index: number, value: string) => {
+    setBookSearchTerms((previous) => {
+      const next = [...previous]
+      while (next.length <= index) {
+        next.push('')
+      }
+      next[index] = value
+      return next
+    })
+  }
+
+  const setBookIdAtIndex = (index: number, value: string) => {
+    form.setValue(`bookIds.${index}`, value, {
+      shouldValidate: true,
+      shouldDirty: true,
+    })
+  }
+
+  const handleBookSearchChange = (index: number, rawValue: string) => {
+    setSearchTerm(index, rawValue)
+    const matchedOption = catalogOptions.find((option) => option.label === rawValue)
+    setBookIdAtIndex(index, matchedOption?.id ?? '')
+  }
+
   const selectedBookId = selectedBookIds.find((id) => id.trim().length > 0) ?? ''
   const selectedBook = (catalogQuery.data ?? []).find((book) => String(book.bookId ?? book.id ?? '') === selectedBookId)
 
@@ -38,7 +81,8 @@ export function PublicReservePage() {
         bookIds: [''],
         reservationHours: DEFAULT_CUSTOMER_RESERVATION_HOURS,
       })
-      toast.success('Reservation submitted. Check your email for next steps.')
+      setBookSearchTerms([''])
+      toast.success('Order submitted. Check your email for next steps.')
       await queryClient.invalidateQueries({ queryKey: ['reservations'] })
     },
     onError: (error) => {
@@ -49,8 +93,8 @@ export function PublicReservePage() {
   return (
     <div className="public-reserve-layout">
       <section className="panel">
-        <h2>Reserve a Book</h2>
-        <p className="panel-note">Enter your email, pick a book, and submit your reservation.</p>
+        <h2>Create an Order</h2>
+        <p className="panel-note">Enter your email, search for a book, and submit your order.</p>
 
         <form onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}>
           <label className="field">
@@ -70,18 +114,13 @@ export function PublicReservePage() {
               <div className="line-item" key={`public-book-${index}`}>
                 <label className="field">
                   <span>Book</span>
-                  <select {...form.register(`bookIds.${index}`)}>
-                    <option value="">Select a book</option>
-                    {(catalogQuery.data ?? []).map((book) => {
-                      const id = String(book.bookId ?? book.id ?? '')
-                      const title = String(book.title ?? 'Untitled')
-                      return (
-                        <option key={id} value={id}>
-                          {title}
-                        </option>
-                      )
-                    })}
-                  </select>
+                  <input
+                    type="text"
+                    list="public-book-options"
+                    placeholder="Search by title or author"
+                    value={getSearchTerm(index)}
+                    onChange={(event) => handleBookSearchChange(index, event.target.value)}
+                  />
                   <small>{form.formState.errors.bookIds?.[index]?.message ?? '\u00a0'}</small>
                 </label>
 
@@ -97,6 +136,7 @@ export function PublicReservePage() {
                       selectedBookIds.filter((_, i) => i !== index),
                       { shouldValidate: true, shouldDirty: true },
                     )
+                    setBookSearchTerms((previous) => previous.filter((_, i) => i !== index))
                   }}
                   disabled={selectedBookIds.length === 1}
                 >
@@ -109,19 +149,26 @@ export function PublicReservePage() {
           <button
             type="button"
             className="ghost"
-            onClick={() =>
+            onClick={() => {
               form.setValue('bookIds', [...selectedBookIds, ''], {
                 shouldValidate: true,
                 shouldDirty: true,
               })
-            }
+              setBookSearchTerms((previous) => [...previous, ''])
+            }}
             disabled={selectedBookIds.length >= 5}
           >
             Add Another Book
           </button>
 
+          <datalist id="public-book-options">
+            {catalogOptions.map((option) => (
+              <option key={option.id} value={option.label} />
+            ))}
+          </datalist>
+
           <label className="field">
-            <span>Reservation Hours (optional)</span>
+            <span>Order Hold Hours (optional)</span>
             <input
               type="number"
               min={1}
@@ -144,9 +191,9 @@ export function PublicReservePage() {
           </label>
 
           <button type="submit" disabled={createMutation.isPending}>
-            {createMutation.isPending ? 'Submitting...' : 'Reserve Books'}
+            {createMutation.isPending ? 'Submitting...' : 'Place Order'}
           </button>
-          {createMutation.isSuccess && <div className="success-banner">Reservation sent successfully.</div>}
+          {createMutation.isSuccess && <div className="success-banner">Order sent successfully.</div>}
           {createMutation.isError && <div className="error-banner">{createMutation.error.message}</div>}
         </form>
       </section>
