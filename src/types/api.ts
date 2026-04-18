@@ -61,7 +61,7 @@ export interface UpdateBookInput {
 
 export interface CreateReservationInput {
   customerName: string
-  customerEmail: string
+  customerEmail?: string
   bookIds: string[]
   reservationHours?: number
 }

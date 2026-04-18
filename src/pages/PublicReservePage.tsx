@@ -82,7 +82,7 @@ export function PublicReservePage() {
         reservationHours: DEFAULT_CUSTOMER_RESERVATION_HOURS,
       })
       setBookSearchTerms([''])
-      toast.success('Order submitted. Check your email for next steps.')
+      toast.success('Order submitted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['reservations'] })
     },
     onError: (error) => {
@@ -94,7 +94,7 @@ export function PublicReservePage() {
     <div className="public-reserve-layout">
       <section className="panel">
         <h2>Create an Order</h2>
-        <p className="panel-note">Enter your email, search for a book, and submit your order.</p>
+        <p className="panel-note">Enter your details, search for books, and submit your order.</p>
 
         <form onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}>
           <label className="field">
@@ -104,7 +104,7 @@ export function PublicReservePage() {
           </label>
 
           <label className="field">
-            <span>Email</span>
+            <span>Email (optional)</span>
             <input type="email" placeholder="you@example.com" {...form.register('email')} />
             <small>{form.formState.errors.email?.message ?? '\u00a0'}</small>
           </label>

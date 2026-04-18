@@ -349,7 +349,7 @@ export function ReservationsPage() {
                 </label>
 
                 <label className="field">
-                  <span>Customer Email</span>
+                  <span>Customer Email (optional)</span>
                   <input type="email" {...editForm.register('customerEmail')} />
                   <small>{editForm.formState.errors.customerEmail?.message ?? '\u00a0'}</small>
                 </label>

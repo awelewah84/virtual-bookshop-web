@@ -19,7 +19,7 @@ export function PublicCatalogPage() {
   const catalogQuery = useQuery({ queryKey: ['catalog'], queryFn: listCatalog })
 
   const createMutation = useMutation({
-    mutationFn: async (payload: { customerName: string; email: string; bookIds: string[] }) =>
+    mutationFn: async (payload: { customerName: string; email?: string; bookIds: string[] }) =>
       createReservation({
         customerName: payload.customerName,
         customerEmail: payload.email,
@@ -30,7 +30,7 @@ export function PublicCatalogPage() {
       setCustomerName('')
       setEmail('')
       setSelectedBookIds([])
-      toast.success('Order submitted. Check your email for next steps.')
+      toast.success('Order submitted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['reservations'] })
     },
     onError: (error) => {
@@ -196,7 +196,7 @@ export function PublicCatalogPage() {
           </label>
 
           <label className="field">
-            <span>Email</span>
+            <span>Email (optional)</span>
             <input
               type="email"
               placeholder="you@example.com"

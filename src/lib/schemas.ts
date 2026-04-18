@@ -1,5 +1,17 @@
 import { z } from 'zod'
 
+const optionalEmailSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') {
+      return value
+    }
+
+    const trimmed = value.trim()
+    return trimmed.length === 0 ? undefined : trimmed
+  },
+  z.string().email('Enter a valid email address').optional(),
+)
+
 export const createBookSchema = z.object({
   title: z.string().min(2, 'Title is required'),
   author: z.string().min(2, 'Author is required'),
@@ -9,14 +21,14 @@ export const createBookSchema = z.object({
 
 export const createReservationSchema = z.object({
   customerName: z.string().min(2, 'Customer name is required'),
-  customerEmail: z.string().email('Enter a valid email address'),
+  customerEmail: optionalEmailSchema,
   bookIds: z.array(z.string().min(1, 'Select a book')).min(1, 'At least one book is required').max(5, 'Maximum 5 books'),
   reservationHours: z.number().positive('Hours must be greater than 0').optional(),
 })
 
 export const createPublicReservationSchema = z.object({
   customerName: z.string().min(2, 'Customer name is required'),
-  email: z.string().email('Enter a valid email address'),
+  email: optionalEmailSchema,
   bookIds: z.array(z.string().min(1, 'Select a book')).min(1, 'At least one book is required').max(5, 'Maximum 5 books'),
   reservationHours: z
     .number()
@@ -26,7 +38,7 @@ export const createPublicReservationSchema = z.object({
 
 export const updateReservationAdminSchema = z.object({
   customerName: z.string().min(2, 'Customer name is required'),
-  customerEmail: z.string().email('Enter a valid email address'),
+  customerEmail: optionalEmailSchema,
   bookIds: z.array(z.string().min(1, 'Select a book')).min(1, 'At least one book is required').max(5, 'Maximum 5 books'),
   reservationHours: z.number().positive('Hours must be greater than 0').optional(),
 })

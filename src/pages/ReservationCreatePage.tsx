@@ -123,7 +123,7 @@ export function ReservationCreatePage() {
         </label>
 
         <label className="field">
-          <span>Customer Email</span>
+          <span>Customer Email (optional)</span>
           <input type="email" placeholder="jane@example.com" {...form.register('customerEmail')} />
           <small>{form.formState.errors.customerEmail?.message ?? '\u00a0'}</small>
         </label>
