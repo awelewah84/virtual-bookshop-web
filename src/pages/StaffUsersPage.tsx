@@ -14,6 +14,8 @@ export function StaffUsersPage() {
   const toast = useToast()
   const usersQuery = useQuery({ queryKey: ['staff-users'], queryFn: listStaffUsers })
 
+  const [newFirstName, setNewFirstName] = useState('')
+  const [newLastName, setNewLastName] = useState('')
   const [newStaffId, setNewStaffId] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [resetStaffId, setResetStaffId] = useState('')
@@ -22,6 +24,8 @@ export function StaffUsersPage() {
   const createMutation = useMutation({
     mutationFn: createStaffUser,
     onSuccess: async () => {
+      setNewFirstName('')
+      setNewLastName('')
       setNewStaffId('')
       setNewPassword('')
       toast.success('Staff user created.')
@@ -69,9 +73,31 @@ export function StaffUsersPage() {
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            createMutation.mutate({ staffId: newStaffId, password: newPassword })
+            const firstName = newFirstName.trim()
+            const lastName = newLastName.trim()
+            const staffId = newStaffId.trim()
+            const password = newPassword.trim()
+
+            if (!firstName || !staffId || !password) {
+              toast.error('First name, staff ID, and password are required.')
+              return
+            }
+
+            createMutation.mutate({ firstName, lastName, staffId, password })
           }}
         >
+          <label className="field">
+            <span>First Name</span>
+            <input value={newFirstName} onChange={(event) => setNewFirstName(event.target.value)} required />
+            <small>{'\u00a0'}</small>
+          </label>
+
+          <label className="field">
+            <span>Last Name</span>
+            <input value={newLastName} onChange={(event) => setNewLastName(event.target.value)} />
+            <small>{'\u00a0'}</small>
+          </label>
+
           <label className="field">
             <span>Staff ID</span>
             <input value={newStaffId} onChange={(event) => setNewStaffId(event.target.value)} required />

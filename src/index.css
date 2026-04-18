@@ -301,6 +301,13 @@ button:hover:not(:disabled),
   grid-template-columns: minmax(420px, 1.35fr) minmax(340px, 1fr);
 }
 
+.public-catalog-order-layout {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 0.9rem;
+  grid-template-columns: minmax(340px, 1.25fr) minmax(320px, 0.95fr);
+}
+
 .catalog-detail-header {
   display: flex;
   align-items: start;
@@ -370,6 +377,44 @@ button:hover:not(:disabled),
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.6);
   padding: 0.8rem;
+}
+
+.public-book-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.book-add-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(31, 35, 51, 0.24);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--accent-strong);
+  font-size: 1.25rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.book-add-icon:disabled {
+  opacity: 0.45;
+}
+
+.stock-ready-pill {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.22rem 0.58rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #0f6135;
+  border: 1px solid rgba(31, 138, 76, 0.4);
+  background: rgba(31, 138, 76, 0.12);
 }
 
 .out-of-stock-card {
@@ -911,6 +956,54 @@ pre {
   display: block;
 }
 
+.selected-order-box {
+  border: 1px solid rgba(31, 35, 51, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 0.65rem;
+}
+
+.selected-order-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.selected-order-header span {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.selected-order-scroll {
+  max-height: 280px;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.5rem;
+  padding-right: 0.1rem;
+}
+
+.selected-order-item {
+  border: 1px solid rgba(31, 35, 51, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.55rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.selected-order-item strong,
+.selected-order-item small {
+  display: block;
+}
+
+.selected-order-item small {
+  color: var(--muted);
+}
+
 pre {
   min-height: 170px;
   font-size: 0.86rem;
@@ -976,6 +1069,7 @@ pre {
   .catalog-public-toolbar,
   .line-item,
   .detail-list,
+  .public-catalog-order-layout,
   .public-reserve-layout,
   .selected-book-panel,
   .book-side-card {

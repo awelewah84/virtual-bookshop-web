@@ -108,6 +108,8 @@ export interface StaffUser extends ApiRecord {
 }
 
 export interface CreateStaffUserInput {
+  firstName: string
+  lastName?: string
   staffId: string
   password?: string
   pin?: string
