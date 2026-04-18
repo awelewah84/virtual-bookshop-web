@@ -22,7 +22,7 @@ export function PublicCatalogPage() {
     mutationFn: async (payload: { customerName: string; email?: string; bookIds: string[] }) =>
       createReservation({
         customerName: payload.customerName,
-        customerEmail: payload.email,
+        customerEmail: payload.email?.trim() ? payload.email.trim() : undefined,
         bookIds: payload.bookIds,
         reservationHours: DEFAULT_CUSTOMER_RESERVATION_HOURS,
       }),

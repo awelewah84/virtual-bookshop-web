@@ -1,16 +1,11 @@
 import { z } from 'zod'
 
-const optionalEmailSchema = z.preprocess(
-  (value) => {
-    if (typeof value !== 'string') {
-      return value
-    }
-
-    const trimmed = value.trim()
-    return trimmed.length === 0 ? undefined : trimmed
-  },
-  z.string().email('Enter a valid email address').optional(),
-)
+const optionalEmailSchema = z
+  .string()
+  .trim()
+  .email('Enter a valid email address')
+  .or(z.literal(''))
+  .optional()
 
 export const createBookSchema = z.object({
   title: z.string().min(2, 'Title is required'),

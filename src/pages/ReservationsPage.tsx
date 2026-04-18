@@ -341,7 +341,14 @@ export function ReservationsPage() {
               <h2>Edit Order</h2>
               <p className="panel-note">Update customer details, books, or hold duration for active order.</p>
 
-              <form onSubmit={editForm.handleSubmit((values) => editMutation.mutate(values))}>
+              <form
+                onSubmit={editForm.handleSubmit((values) =>
+                  editMutation.mutate({
+                    ...values,
+                    customerEmail: values.customerEmail?.trim() ? values.customerEmail.trim() : undefined,
+                  }),
+                )}
+              >
                 <label className="field">
                   <span>Customer Name</span>
                   <input type="text" {...editForm.register('customerName')} />

@@ -115,7 +115,14 @@ export function ReservationCreatePage() {
       <h2>Create Order</h2>
       <p className="panel-note">Internal order form with multiple line items.</p>
 
-      <form onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}>
+      <form
+        onSubmit={form.handleSubmit((values) =>
+          createMutation.mutate({
+            ...values,
+            customerEmail: values.customerEmail?.trim() ? values.customerEmail.trim() : undefined,
+          }),
+        )}
+      >
         <label className="field">
           <span>Customer Name</span>
           <input type="text" placeholder="Jane Doe" {...form.register('customerName')} />

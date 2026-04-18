@@ -70,7 +70,7 @@ export function PublicReservePage() {
     mutationFn: async (values: CreatePublicReservationSchema) =>
       createReservation({
         customerName: values.customerName,
-        customerEmail: values.email,
+        customerEmail: values.email?.trim() ? values.email.trim() : undefined,
         bookIds: values.bookIds,
         reservationHours: values.reservationHours ?? DEFAULT_CUSTOMER_RESERVATION_HOURS,
       }),
