@@ -27,6 +27,7 @@ export interface Reservation extends ApiRecord {
   customerName?: string
   customerEmail?: string
   expiresAt?: string
+  completedAt?: string
   status?: ReservationStatus
   createdAt?: string
   items?: ReservationItem[]
@@ -149,17 +150,24 @@ export interface SalesSummaryDailyRow extends ApiRecord {
   itemsCount?: number
   grossSales?: number
   reservationNos?: string[]
+  reservations?: Reservation[]
   byStaff?: SalesSummaryByStaffRow[]
 }
 
 export interface SalesSummaryByStaffRow extends ApiRecord {
   staffId?: string
+  displayName?: string
   firstName?: string
   lastName?: string
   ordersCount?: number
   itemsCount?: number
   grossSales?: number
   reservationNos?: string[]
+  reservations?: Reservation[]
+}
+
+export interface SalesSummaryStaffAggregateRow extends SalesSummaryByStaffRow {
+  sales?: SalesSummaryDailyRow[]
 }
 
 export interface SalesSummaryResponse extends ApiRecord {
@@ -170,4 +178,27 @@ export interface SalesSummaryResponse extends ApiRecord {
   }
   totals?: SalesSummaryTotals
   byDay?: SalesSummaryDailyRow[]
+  byStaff?: SalesSummaryStaffAggregateRow[]
+}
+
+export interface StockSalesOverviewTotals extends ApiRecord {
+  booksCount?: number
+  totalStock?: number
+  stockSold?: number
+  stockLeft?: number
+}
+
+export interface StockSalesOverviewBook extends ApiRecord {
+  bookId?: string
+  title?: string
+  author?: string
+  category?: string
+  totalStock?: number
+  stockSold?: number
+  stockLeft?: number
+}
+
+export interface StockSalesOverviewResponse extends ApiRecord {
+  totals?: StockSalesOverviewTotals
+  books?: StockSalesOverviewBook[]
 }

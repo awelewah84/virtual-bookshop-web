@@ -13,8 +13,13 @@ import type {
   StaffLoginResponse,
   SalesSummaryFilters,
   SalesSummaryDailyRow,
+  SalesSummaryByStaffRow,
   SalesSummaryRow,
   SalesSummaryResponse,
+  SalesSummaryStaffAggregateRow,
+  StockSalesOverviewBook,
+  StockSalesOverviewResponse,
+  StockSalesOverviewTotals,
   StaffUser,
   UpdateBookInput,
   UpdateStockInput,
@@ -241,6 +246,133 @@ function makeQueryString(filters?: SalesSummaryFilters): string {
   return text.length > 0 ? `?${text}` : ''
 }
 
+function normalizeReservationNos(values: unknown): string[] {
+  return Array.isArray(values) ? values.map((value) => String(value)) : []
+}
+
+function normalizeReservations(values: unknown): Reservation[] {
+  return Array.isArray(values) ? values : []
+}
+
+function mergeSummaryReservations(existing: Reservation[], incoming: Reservation[]): Reservation[] {
+  const byReservationNo = new Map<string, Reservation>()
+
+  for (const reservation of existing) {
+    const reservationNo = String(reservation.reservationNo ?? '').trim()
+    if (!reservationNo) {
+      continue
+    }
+
+    byReservationNo.set(reservationNo, reservation)
+  }
+
+  for (const reservation of incoming) {
+    const reservationNo = String(reservation.reservationNo ?? '').trim()
+    if (!reservationNo) {
+      continue
+    }
+
+    byReservationNo.set(reservationNo, reservation)
+  }
+
+  return [...byReservationNo.values()].sort((left, right) =>
+    String(left.reservationNo ?? '').localeCompare(String(right.reservationNo ?? '')),
+  )
+}
+
+function normalizeSummaryByStaffEntry(entry: SalesSummaryByStaffRow): SalesSummaryByStaffRow {
+  return {
+    ...entry,
+    reservationNos: normalizeReservationNos(entry.reservationNos),
+    reservations: normalizeReservations(entry.reservations),
+  }
+}
+
+function normalizeSummaryDayRow(day: SalesSummaryDailyRow): SalesSummaryDailyRow {
+  return {
+    ...day,
+    reservationNos: normalizeReservationNos(day.reservationNos),
+    reservations: normalizeReservations(day.reservations),
+    byStaff: Array.isArray(day.byStaff) ? day.byStaff.map(normalizeSummaryByStaffEntry) : [],
+  }
+}
+
+function flattenByStaffSales(rows: SalesSummaryStaffAggregateRow[]): SalesSummaryDailyRow[] {
+  const byDate = new Map<string, SalesSummaryDailyRow>()
+
+  for (const row of rows) {
+    const staffId = String(row.staffId ?? '').trim()
+    const dailySales = Array.isArray(row.sales) ? row.sales : []
+
+    for (const sale of dailySales) {
+      const normalizedSale = normalizeSummaryDayRow(sale)
+      const date = String(normalizedSale.date ?? '')
+
+      if (!date) {
+        continue
+      }
+
+      const current = byDate.get(date) ?? {
+        date,
+        ordersCount: 0,
+        itemsCount: 0,
+        grossSales: 0,
+        reservationNos: [],
+        reservations: [],
+        byStaff: [],
+      }
+
+      const mergedReservationNos = new Set<string>([
+        ...normalizeReservationNos(current.reservationNos),
+        ...normalizeReservationNos(normalizedSale.reservationNos),
+      ])
+
+      const currentByStaff = Array.isArray(current.byStaff) ? current.byStaff : []
+      const existingByStaff = currentByStaff.find((entry) => String(entry.staffId ?? '').trim() === staffId)
+      const mergedStaffReservationNos = new Set<string>([
+        ...normalizeReservationNos(existingByStaff?.reservationNos),
+        ...normalizeReservationNos(normalizedSale.reservationNos),
+      ])
+
+      const mergedByStaffRow: SalesSummaryByStaffRow = {
+        staffId: row.staffId,
+        displayName: row.displayName,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        ordersCount: (toNumber(existingByStaff?.ordersCount) ?? 0) + (toNumber(normalizedSale.ordersCount) ?? 0),
+        itemsCount: (toNumber(existingByStaff?.itemsCount) ?? 0) + (toNumber(normalizedSale.itemsCount) ?? 0),
+        grossSales: Number(
+          ((toNumber(existingByStaff?.grossSales) ?? 0) + (toNumber(normalizedSale.grossSales) ?? 0)).toFixed(2),
+        ),
+        reservationNos: [...mergedStaffReservationNos],
+        reservations: mergeSummaryReservations(
+          normalizeReservations(existingByStaff?.reservations),
+          normalizeReservations(normalizedSale.reservations),
+        ),
+      }
+
+      byDate.set(date, {
+        ...current,
+        date,
+        ordersCount: (toNumber(current.ordersCount) ?? 0) + (toNumber(normalizedSale.ordersCount) ?? 0),
+        itemsCount: (toNumber(current.itemsCount) ?? 0) + (toNumber(normalizedSale.itemsCount) ?? 0),
+        grossSales: Number(((toNumber(current.grossSales) ?? 0) + (toNumber(normalizedSale.grossSales) ?? 0)).toFixed(2)),
+        reservationNos: [...mergedReservationNos],
+        reservations: mergeSummaryReservations(
+          normalizeReservations(current.reservations),
+          normalizeReservations(normalizedSale.reservations),
+        ),
+        byStaff: [
+          ...currentByStaff.filter((entry) => String(entry.staffId ?? '').trim() !== staffId),
+          mergedByStaffRow,
+        ].sort((left, right) => String(left.staffId ?? '').localeCompare(String(right.staffId ?? ''))),
+      })
+    }
+  }
+
+  return [...byDate.values()].sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? '')))
+}
+
 export async function getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummaryRow[]> {
   const data = await requestJson<SalesSummaryResponse>(`/api/reports/sales-summary${makeQueryString(filters)}`)
 
@@ -255,7 +387,12 @@ export async function getSalesSummary(filters?: SalesSummaryFilters): Promise<Sa
     paymentReceivedBy: data.filters?.paymentReceivedBy ?? filters?.paymentReceivedBy ?? '',
   }
 
-  const dayRows = (data.byDay ?? []).map((day: SalesSummaryDailyRow) => ({
+  const normalizedDayRows =
+    Array.isArray(data.byDay) && data.byDay.length > 0
+      ? data.byDay.map(normalizeSummaryDayRow)
+      : flattenByStaffSales(Array.isArray(data.byStaff) ? data.byStaff : [])
+
+  const dayRows = normalizedDayRows.map((day: SalesSummaryDailyRow) => ({
     section: 'DAY',
     date: String(day.date ?? ''),
     ordersCount: typeof day.ordersCount === 'number' ? day.ordersCount : 0,
@@ -264,8 +401,15 @@ export async function getSalesSummary(filters?: SalesSummaryFilters): Promise<Sa
     from: '',
     to: '',
     paymentReceivedBy: data.filters?.paymentReceivedBy ?? filters?.paymentReceivedBy ?? '',
-      reservationNos: Array.isArray(day.reservationNos) ? day.reservationNos.map((value) => String(value)) : [],
-      byStaff: Array.isArray(day.byStaff) ? day.byStaff : [],
+    reservationNos: Array.isArray(day.reservationNos) ? day.reservationNos.map((value) => String(value)) : [],
+    reservations: Array.isArray(day.reservations) ? day.reservations : [],
+    byStaff: Array.isArray(day.byStaff)
+      ? day.byStaff.map((entry) => ({
+          ...entry,
+          reservationNos: Array.isArray(entry.reservationNos) ? entry.reservationNos.map((value) => String(value)) : [],
+          reservations: Array.isArray(entry.reservations) ? entry.reservations : [],
+        }))
+      : [],
   }))
 
   return [totalsRow, ...dayRows]
@@ -286,4 +430,47 @@ export async function exportSalesSummaryCsv(filters?: SalesSummaryFilters): Prom
   }
 
   return response.blob()
+}
+
+export async function exportStockSalesOverviewCsv(): Promise<Blob> {
+  const token = getAccessToken()
+  const response = await fetch(`${API_BASE_URL}/api/reports/stock-sales-overview.csv`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(body || `Request failed with status ${response.status}`)
+  }
+
+  return response.blob()
+}
+
+export interface StockSalesOverview {
+  totals: StockSalesOverviewTotals
+  books: StockSalesOverviewBook[]
+}
+
+export async function getStockSalesOverview(): Promise<StockSalesOverview> {
+  const data = await requestJson<StockSalesOverviewResponse>('/api/reports/stock-sales-overview')
+
+  return {
+    totals: {
+      booksCount: typeof data.totals?.booksCount === 'number' ? data.totals.booksCount : 0,
+      totalStock: typeof data.totals?.totalStock === 'number' ? data.totals.totalStock : 0,
+      stockSold: typeof data.totals?.stockSold === 'number' ? data.totals.stockSold : 0,
+      stockLeft: typeof data.totals?.stockLeft === 'number' ? data.totals.stockLeft : 0,
+    },
+    books: Array.isArray(data.books)
+      ? data.books.map((book) => ({
+          ...book,
+          totalStock: typeof book.totalStock === 'number' ? book.totalStock : 0,
+          stockSold: typeof book.stockSold === 'number' ? book.stockSold : 0,
+          stockLeft: typeof book.stockLeft === 'number' ? book.stockLeft : 0,
+        }))
+      : [],
+  }
 }

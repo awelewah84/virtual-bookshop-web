@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { exportSalesSummaryCsv, getSalesSummary, listStaffUsers } from '../lib/api'
+import { exportSalesSummaryCsv, exportStockSalesOverviewCsv, getSalesSummary, getStockSalesOverview, listStaffUsers } from '../lib/api'
 import { useToast } from '../hooks/useToast'
 import { formatCurrency } from '../lib/currency'
-import type { SalesSummaryByStaffRow, SalesSummaryRow } from '../types/api'
+import type { Reservation, SalesSummaryByStaffRow, SalesSummaryRow } from '../types/api'
+
+type ReportTab = 'sales' | 'stock-overview'
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10)
@@ -29,6 +31,41 @@ function toSafeNumber(value: unknown): number {
   return 0
 }
 
+function mergeReservations(existing: Reservation[] | undefined, incoming: Reservation[] | undefined): Reservation[] {
+  const byReservationNo = new Map<string, Reservation>()
+
+  for (const reservation of existing ?? []) {
+    const reservationNo = String(reservation.reservationNo ?? '').trim()
+    if (!reservationNo) {
+      continue
+    }
+
+    byReservationNo.set(reservationNo, reservation)
+  }
+
+  for (const reservation of incoming ?? []) {
+    const reservationNo = String(reservation.reservationNo ?? '').trim()
+    if (!reservationNo) {
+      continue
+    }
+
+    byReservationNo.set(reservationNo, reservation)
+  }
+
+  return [...byReservationNo.values()].sort((left, right) =>
+    String(left.reservationNo ?? '').localeCompare(String(right.reservationNo ?? '')),
+  )
+}
+
+function formatDateTime(value: string | undefined): string {
+  if (!value) {
+    return '-'
+  }
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+}
+
 function mergeSalesSummaryRows(
   groupedRows: SalesSummaryRow[][],
   from: string | undefined,
@@ -45,6 +82,7 @@ function mergeSalesSummaryRows(
       itemsCount: number
       grossSales: number
       reservationNos: Set<string>
+      reservations: Reservation[]
       byStaff: Map<string, SalesSummaryByStaffRow>
     }
   >()
@@ -74,6 +112,7 @@ function mergeSalesSummaryRows(
         itemsCount: 0,
         grossSales: 0,
         reservationNos: new Set<string>(),
+        reservations: [],
         byStaff: new Map<string, SalesSummaryByStaffRow>(),
       }
       current.ordersCount += toSafeNumber(row.ordersCount)
@@ -83,6 +122,8 @@ function mergeSalesSummaryRows(
       for (const reservationNo of Array.isArray(row.reservationNos) ? row.reservationNos : []) {
         current.reservationNos.add(String(reservationNo))
       }
+
+      current.reservations = mergeReservations(current.reservations, Array.isArray(row.reservations) ? row.reservations : [])
 
       const byStaffRows = Array.isArray(row.byStaff) ? row.byStaff : []
       for (const byStaffRow of byStaffRows) {
@@ -102,12 +143,17 @@ function mergeSalesSummaryRows(
 
         current.byStaff.set(staffId, {
           staffId,
+          displayName: byStaffRow.displayName,
           firstName: byStaffRow.firstName,
           lastName: byStaffRow.lastName,
           ordersCount: toSafeNumber(existing?.ordersCount) + toSafeNumber(byStaffRow.ordersCount),
           itemsCount: toSafeNumber(existing?.itemsCount) + toSafeNumber(byStaffRow.itemsCount),
           grossSales: Number((toSafeNumber(existing?.grossSales) + toSafeNumber(byStaffRow.grossSales)).toFixed(2)),
           reservationNos: [...mergedReservationNos],
+          reservations: mergeReservations(
+            Array.isArray(existing?.reservations) ? existing.reservations : [],
+            Array.isArray(byStaffRow.reservations) ? byStaffRow.reservations : [],
+          ),
         })
       }
 
@@ -138,56 +184,21 @@ function mergeSalesSummaryRows(
       to: '',
       paymentReceivedBy: selectedStaffIds.join('|'),
       reservationNos: [...values.reservationNos],
+      reservations: values.reservations,
       byStaff: [...values.byStaff.values()],
     }))
 
   return [totalRow, ...dayRows]
 }
 
-function toCsvValue(value: string | number): string {
-  const text = String(value)
-  if (/[",\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`
-  }
-
-  return text
-}
-
-function buildMultiStaffCsv(
-  rows: SalesSummaryRow[],
-  from: string | undefined,
-  to: string | undefined,
-  staffIds: string[],
-): string {
-  const paidByValue = staffIds.join('|')
-  const lines: string[] = []
-  lines.push('section,date,ordersCount,itemsCount,grossSales,from,to,paymentReceivedBy')
-
-  for (const row of rows) {
-    const section = String(row.section ?? '')
-    const date = String(row.date ?? '')
-    const ordersCount = toSafeNumber(row.ordersCount)
-    const itemsCount = toSafeNumber(row.itemsCount)
-    const grossSales = toSafeNumber(row.grossSales).toFixed(2)
-    const rowFrom = section.toUpperCase() === 'TOTAL' ? from ?? '' : ''
-    const rowTo = section.toUpperCase() === 'TOTAL' ? to ?? '' : ''
-
-    lines.push(
-      [section, date, ordersCount, itemsCount, grossSales, rowFrom, rowTo, paidByValue]
-        .map((value) => toCsvValue(value))
-        .join(','),
-    )
-  }
-
-  return `${lines.join('\n')}\n`
-}
-
 export function AdminReconciliationPage() {
   const toast = useToast()
+  const [activeTab, setActiveTab] = useState<ReportTab>('sales')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState(todayIsoDate())
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([])
   const [isExporting, setIsExporting] = useState(false)
+  const [isExportingStockOverview, setIsExportingStockOverview] = useState(false)
   const [expandedDays, setExpandedDays] = useState<string[]>([])
 
   const staffUsersQuery = useQuery({ queryKey: ['staff-users'], queryFn: listStaffUsers })
@@ -243,12 +254,17 @@ export function AdminReconciliationPage() {
 
   const formatByStaffRowName = (row: SalesSummaryByStaffRow): string => {
     const staffId = String(row.staffId ?? '').trim()
+    const displayName = String(row.displayName ?? '').trim()
     const firstName = String(row.firstName ?? '').trim()
     const lastName = String(row.lastName ?? '').trim()
     const joined = `${firstName} ${lastName}`.trim()
 
     if (!staffId) {
-      return joined || '-'
+      return displayName || joined || '-'
+    }
+
+    if (displayName) {
+      return `${displayName} (${staffId})`
     }
 
     if (joined) {
@@ -262,6 +278,50 @@ export function AdminReconciliationPage() {
     normalizedSelectedStaffIds.length > 0
       ? normalizedSelectedStaffIds.map((id) => staffLabelById.get(id) ?? id).join(', ')
       : 'All staff'
+
+  const renderReservationDetails = (reservations: Reservation[] | undefined, emptyMessage: string) => {
+    const rows = Array.isArray(reservations) ? reservations : []
+
+    if (rows.length === 0) {
+      return <p>{emptyMessage}</p>
+    }
+
+    return (
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Reservation No</th>
+              <th>Customer</th>
+              <th>Email</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Completed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((reservation, reservationIndex) => {
+              const reservationNo = String(reservation.reservationNo ?? `reservation-${reservationIndex + 1}`)
+              const itemTitles = (Array.isArray(reservation.items) ? reservation.items : [])
+                .map((item) => String(item.title ?? '').trim())
+                .filter(Boolean)
+
+              return (
+                <tr key={reservationNo}>
+                  <td>{reservationNo}</td>
+                  <td>{String(reservation.customerName ?? '-')}</td>
+                  <td>{String(reservation.customerEmail ?? '-')}</td>
+                  <td>{itemTitles.length > 0 ? itemTitles.join(', ') : '-'}</td>
+                  <td>{formatCurrency(reservation.totalCost)}</td>
+                  <td>{formatDateTime(typeof reservation.completedAt === 'string' ? reservation.completedAt : undefined)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
   const filters = useMemo(
     () => ({
@@ -293,15 +353,15 @@ export function AdminReconciliationPage() {
     },
   })
 
+  const stockOverviewQuery = useQuery({
+    queryKey: ['stock-sales-overview'],
+    queryFn: getStockSalesOverview,
+  })
+
   async function handleExport(): Promise<void> {
     try {
       setIsExporting(true)
-      const blob =
-        normalizedSelectedStaffIds.length <= 1
-          ? await exportSalesSummaryCsv(filters)
-          : new Blob([buildMultiStaffCsv(summaryQuery.data ?? [], filters.from, filters.to, normalizedSelectedStaffIds)], {
-              type: 'text/csv;charset=utf-8',
-            })
+      const blob = await exportSalesSummaryCsv(filters)
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       const nameFrom = filters.from ?? 'all'
@@ -321,264 +381,370 @@ export function AdminReconciliationPage() {
     }
   }
 
+  async function handleStockOverviewExport(): Promise<void> {
+    try {
+      setIsExportingStockOverview(true)
+      const blob = await exportStockSalesOverviewCsv()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'stock-sales-overview.csv'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('Stock overview CSV export downloaded.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Stock overview export failed')
+    } finally {
+      setIsExportingStockOverview(false)
+    }
+  }
+
   return (
     <section className="panel">
       <h2>Admin Reconciliation</h2>
-      <p className="panel-note">Review sales totals and daily aggregates, then export CSV for finance reconciliation.</p>
+      <p className="panel-note">Review finance and stock reports from one place.</p>
 
-      <div className="reconciliation-presets">
+      <div className="report-tabs" role="tablist" aria-label="Reports">
         <button
           type="button"
-          className="ghost"
-          onClick={() => {
-            const today = todayIsoDate()
-            setFrom(today)
-            setTo(today)
-          }}
+          role="tab"
+          aria-selected={activeTab === 'sales'}
+          className={`report-tab${activeTab === 'sales' ? ' active' : ''}`}
+          onClick={() => setActiveTab('sales')}
         >
-          Today
+          Sales Summary
         </button>
         <button
           type="button"
-          className="ghost"
-          onClick={() => {
-            setFrom(isoDateFromOffset(-6))
-            setTo(todayIsoDate())
-          }}
+          role="tab"
+          aria-selected={activeTab === 'stock-overview'}
+          className={`report-tab${activeTab === 'stock-overview' ? ' active' : ''}`}
+          onClick={() => setActiveTab('stock-overview')}
         >
-          Last 7 Days
-        </button>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            setFrom(monthStartIsoDate())
-            setTo(todayIsoDate())
-          }}
-        >
-          This Month
-        </button>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            setFrom('')
-            setTo(todayIsoDate())
-          }}
-        >
-          Clear From
+          Stock Sales Overview
         </button>
       </div>
 
-      <div className="reconciliation-filters">
-        <label className="field">
-          <span>From</span>
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-          <small>{'\u00a0'}</small>
-        </label>
+      {activeTab === 'sales' && (
+        <>
+          <div className="reconciliation-presets">
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                const today = todayIsoDate()
+                setFrom(today)
+                setTo(today)
+              }}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setFrom(isoDateFromOffset(-6))
+                setTo(todayIsoDate())
+              }}
+            >
+              Last 7 Days
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setFrom(monthStartIsoDate())
+                setTo(todayIsoDate())
+              }}
+            >
+              This Month
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setFrom('')
+                setTo(todayIsoDate())
+              }}
+            >
+              Clear From
+            </button>
+          </div>
 
-        <label className="field">
-          <span>To</span>
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-          <small>{'\u00a0'}</small>
-        </label>
+          <div className="reconciliation-filters">
+            <label className="field">
+              <span>From</span>
+              <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+              <small>{'\u00a0'}</small>
+            </label>
 
-        <button type="button" onClick={handleExport} disabled={isExporting || summaryQuery.isFetching}>
-          {isExporting ? 'Exporting...' : 'Export CSV'}
-        </button>
-      </div>
+            <label className="field">
+              <span>To</span>
+              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+              <small>{'\u00a0'}</small>
+            </label>
 
-      <h3>Staff Users</h3>
-      <p className="panel-note">Select one or more staff users to filter payment records.</p>
+            <button type="button" onClick={handleExport} disabled={isExporting || summaryQuery.isFetching}>
+              {isExporting ? 'Exporting...' : 'Export CSV'}
+            </button>
+          </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Select</th>
-              <th>Name</th>
-              <th>Staff ID</th>
-              <th>Status</th>
-              <th>Last Login</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(staffUsersQuery.data ?? []).length === 0 && (
-              <tr>
-                <td colSpan={5}>No staff users found.</td>
-              </tr>
-            )}
+          <h3>Staff Users</h3>
+          <p className="panel-note">Select one or more staff users to filter payment records.</p>
 
-            {(staffUsersQuery.data ?? []).map((user, index) => {
-              const staffId = String(user.staffId ?? `staff-${index + 1}`)
-              const firstName = String(user.firstName ?? '').trim()
-              const lastName = String(user.lastName ?? '').trim()
-              const displayName = `${firstName} ${lastName}`.trim() || '-'
-              const isActive = user.isActive !== false
-              const checked = normalizedSelectedStaffIds.includes(staffId)
-              const lastLogin = user.lastLogin ? new Date(String(user.lastLogin)).toLocaleString() : '-'
-
-              return (
-                <tr key={staffId}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedStaffIds((prev) => {
-                          if (prev.includes(staffId)) {
-                            return prev.filter((value) => value !== staffId)
-                          }
-
-                          return [...prev, staffId]
-                        })
-                      }}
-                      aria-label={`Select ${staffId}`}
-                    />
-                  </td>
-                  <td>{displayName}</td>
-                  <td>{staffId}</td>
-                  <td>{isActive ? 'Active' : 'Inactive'}</td>
-                  <td>{lastLogin}</td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Select</th>
+                  <th>Name</th>
+                  <th>Staff ID</th>
+                  <th>Status</th>
+                  <th>Last Login</th>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <p className="panel-note">
-        Staff payment filter: {selectedStaffLabel}
-      </p>
-
-      {staffUsersQuery.isError && <div className="error-banner">Unable to load staff list: {staffUsersQuery.error.message}</div>}
-
-      {summaryQuery.isError && <div className="error-banner">{summaryQuery.error.message}</div>}
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Section</th>
-              <th>Staff Name</th>
-              <th>Date</th>
-              <th>Orders</th>
-              <th>Items</th>
-              <th>Gross Sales</th>
-              <th>From</th>
-              <th>To</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(summaryQuery.data ?? []).length === 0 && !summaryQuery.isFetching && (
-              <tr>
-                <td colSpan={8}>No summary rows for this filter window.</td>
-              </tr>
-            )}
-
-            {(summaryQuery.data ?? []).map((row, index) => {
-              const section = String(row.section ?? '-').toUpperCase()
-              const date = String(row.date ?? '-')
-              const isDayRow = section === 'DAY'
-              const dayKey = `${date}-${index}`
-              const isExpanded = expandedDays.includes(dayKey)
-              const ordersCount = typeof row.ordersCount === 'number' ? row.ordersCount : '-'
-              const itemsCount = typeof row.itemsCount === 'number' ? row.itemsCount : '-'
-              const grossSales = typeof row.grossSales === 'number' ? row.grossSales : undefined
-              const rangeFrom = String(row.from ?? filters.from ?? '-')
-              const rangeTo = String(row.to ?? filters.to ?? '-')
-              const staffRaw =
-                typeof row.paymentReceivedBy === 'string' && row.paymentReceivedBy.trim().length > 0
-                  ? row.paymentReceivedBy
-                  : normalizedSelectedStaffIds.length > 0
-                    ? normalizedSelectedStaffIds.join('|')
-                    : ''
-
-              return (
-                <>
-                  <tr key={`${section}-${date}-${index}`}>
-                    <td>
-                      <span className={section === 'TOTAL' ? 'status-badge status-completed' : 'status-badge'}>{section}</span>
-                    </td>
-                    <td>{formatStaffLabel(staffRaw)}</td>
-                    <td>
-                      {date}
-                      {isDayRow && (
-                        <button
-                          type="button"
-                          className="ghost"
-                          onClick={() => {
-                            setExpandedDays((prev) =>
-                              prev.includes(dayKey) ? prev.filter((value) => value !== dayKey) : [...prev, dayKey],
-                            )
-                          }}
-                        >
-                          {isExpanded ? 'Hide details' : 'View details'}
-                        </button>
-                      )}
-                    </td>
-                    <td>{ordersCount}</td>
-                    <td>{itemsCount}</td>
-                    <td>{formatCurrency(grossSales)}</td>
-                    <td>{rangeFrom}</td>
-                    <td>{rangeTo}</td>
+              </thead>
+              <tbody>
+                {(staffUsersQuery.data ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={5}>No staff users found.</td>
                   </tr>
+                )}
 
-                  {isDayRow && isExpanded && (
-                    <tr key={`${dayKey}-details`}>
-                      <td colSpan={8}>
-                        <div className="reconciliation-drilldown">
-                          <p>
-                            <strong>Reservation Nos:</strong>{' '}
-                            {Array.isArray(row.reservationNos) && row.reservationNos.length > 0
-                              ? row.reservationNos.join(', ')
-                              : '-'}
-                          </p>
+                {(staffUsersQuery.data ?? []).map((user, index) => {
+                  const staffId = String(user.staffId ?? `staff-${index + 1}`)
+                  const firstName = String(user.firstName ?? '').trim()
+                  const lastName = String(user.lastName ?? '').trim()
+                  const displayName = `${firstName} ${lastName}`.trim() || '-'
+                  const isActive = user.isActive !== false
+                  const checked = normalizedSelectedStaffIds.includes(staffId)
+                  const lastLogin = user.lastLogin ? new Date(String(user.lastLogin)).toLocaleString() : '-'
 
-                          <div className="table-wrap">
-                            <table>
-                              <thead>
-                                <tr>
-                                  <th>Staff</th>
-                                  <th>Orders</th>
-                                  <th>Items</th>
-                                  <th>Gross Sales</th>
-                                  <th>Reservation Nos</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(Array.isArray(row.byStaff) ? row.byStaff : []).length === 0 && (
-                                  <tr>
-                                    <td colSpan={5}>No by-staff details for this day.</td>
-                                  </tr>
-                                )}
+                  return (
+                    <tr key={staffId}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedStaffIds((prev) => {
+                              if (prev.includes(staffId)) {
+                                return prev.filter((value) => value !== staffId)
+                              }
 
-                                {(Array.isArray(row.byStaff) ? row.byStaff : []).map((entry, entryIndex) => (
-                                  <tr key={`${dayKey}-staff-${entryIndex}`}>
-                                    <td>{formatByStaffRowName(entry)}</td>
-                                    <td>{toSafeNumber(entry.ordersCount)}</td>
-                                    <td>{toSafeNumber(entry.itemsCount)}</td>
-                                    <td>{formatCurrency(entry.grossSales)}</td>
-                                    <td>
-                                      {Array.isArray(entry.reservationNos) && entry.reservationNos.length > 0
-                                        ? entry.reservationNos.join(', ')
-                                        : '-'}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                              return [...prev, staffId]
+                            })
+                          }}
+                          aria-label={`Select ${staffId}`}
+                        />
                       </td>
+                      <td>{displayName}</td>
+                      <td>{staffId}</td>
+                      <td>{isActive ? 'Active' : 'Inactive'}</td>
+                      <td>{lastLogin}</td>
                     </tr>
-                  )}
-                </>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="panel-note">Staff payment filter: {selectedStaffLabel}</p>
+
+          {staffUsersQuery.isError && <div className="error-banner">Unable to load staff list: {staffUsersQuery.error.message}</div>}
+
+          {summaryQuery.isError && <div className="error-banner">{summaryQuery.error.message}</div>}
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Section</th>
+                  <th>Staff Name</th>
+                  <th>Date</th>
+                  <th>Orders</th>
+                  <th>Items</th>
+                  <th>Gross Sales</th>
+                  <th>From</th>
+                  <th>To</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(summaryQuery.data ?? []).length === 0 && !summaryQuery.isFetching && (
+                  <tr>
+                    <td colSpan={8}>No summary rows for this filter window.</td>
+                  </tr>
+                )}
+
+                {(summaryQuery.data ?? []).map((row, index) => {
+                  const section = String(row.section ?? '-').toUpperCase()
+                  const date = String(row.date ?? '-')
+                  const isDayRow = section === 'DAY'
+                  const dayKey = `${date}-${index}`
+                  const isExpanded = expandedDays.includes(dayKey)
+                  const ordersCount = typeof row.ordersCount === 'number' ? row.ordersCount : '-'
+                  const itemsCount = typeof row.itemsCount === 'number' ? row.itemsCount : '-'
+                  const grossSales = typeof row.grossSales === 'number' ? row.grossSales : undefined
+                  const rangeFrom = String(row.from ?? filters.from ?? '-')
+                  const rangeTo = String(row.to ?? filters.to ?? '-')
+                  const staffRaw =
+                    typeof row.paymentReceivedBy === 'string' && row.paymentReceivedBy.trim().length > 0
+                      ? row.paymentReceivedBy
+                      : normalizedSelectedStaffIds.length > 0
+                        ? normalizedSelectedStaffIds.join('|')
+                        : ''
+
+                  return (
+                    <Fragment key={`${section}-${date}-${index}`}>
+                      <tr>
+                        <td>
+                          <span className={section === 'TOTAL' ? 'status-badge status-completed' : 'status-badge'}>{section}</span>
+                        </td>
+                        <td>{formatStaffLabel(staffRaw)}</td>
+                        <td>
+                          {date}
+                          {isDayRow && (
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={() => {
+                                setExpandedDays((prev) =>
+                                  prev.includes(dayKey) ? prev.filter((value) => value !== dayKey) : [...prev, dayKey],
+                                )
+                              }}
+                            >
+                              {isExpanded ? 'Hide details' : 'View details'}
+                            </button>
+                          )}
+                        </td>
+                        <td>{ordersCount}</td>
+                        <td>{itemsCount}</td>
+                        <td>{formatCurrency(grossSales)}</td>
+                        <td>{rangeFrom}</td>
+                        <td>{rangeTo}</td>
+                      </tr>
+
+                      {isDayRow && isExpanded && (
+                        <tr>
+                          <td colSpan={8}>
+                            <div className="reconciliation-drilldown">
+                              <div className="table-wrap">
+                                <table>
+                                  <thead>
+                                    <tr>
+                                      <th>Staff</th>
+                                      <th>Orders</th>
+                                      <th>Items</th>
+                                      <th>Gross Sales</th>
+                                      <th>Reservations</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(Array.isArray(row.byStaff) ? row.byStaff : []).length === 0 && (
+                                      <tr>
+                                        <td colSpan={5}>No by-staff details for this day.</td>
+                                      </tr>
+                                    )}
+
+                                    {(Array.isArray(row.byStaff) ? row.byStaff : []).map((entry, entryIndex) => (
+                                      <tr key={`${dayKey}-staff-${entryIndex}`}>
+                                        <td>{formatByStaffRowName(entry)}</td>
+                                        <td>{toSafeNumber(entry.ordersCount)}</td>
+                                        <td>{toSafeNumber(entry.itemsCount)}</td>
+                                        <td>{formatCurrency(entry.grossSales)}</td>
+                                        <td>{renderReservationDetails(entry.reservations, 'No reservations')}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'stock-overview' && (
+        <>
+          <p className="panel-note">Track book stock against completed sales across the current catalog.</p>
+
+          <div className="reconciliation-actions">
+            <button
+              type="button"
+              onClick={handleStockOverviewExport}
+              disabled={isExportingStockOverview || stockOverviewQuery.isFetching}
+            >
+              {isExportingStockOverview ? 'Exporting...' : 'Export CSV'}
+            </button>
+          </div>
+
+          {stockOverviewQuery.isError && <div className="error-banner">{stockOverviewQuery.error.message}</div>}
+
+          <div className="report-stat-grid">
+            <article className="report-stat-card">
+              <span className="report-stat-label">Books</span>
+              <strong>{toSafeNumber(stockOverviewQuery.data?.totals.booksCount)}</strong>
+            </article>
+            <article className="report-stat-card">
+              <span className="report-stat-label">Total Stock</span>
+              <strong>{toSafeNumber(stockOverviewQuery.data?.totals.totalStock)}</strong>
+            </article>
+            <article className="report-stat-card">
+              <span className="report-stat-label">Sold</span>
+              <strong>{toSafeNumber(stockOverviewQuery.data?.totals.stockSold)}</strong>
+            </article>
+            <article className="report-stat-card">
+              <span className="report-stat-label">Left</span>
+              <strong>{toSafeNumber(stockOverviewQuery.data?.totals.stockLeft)}</strong>
+            </article>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Author</th>
+                  <th>Category</th>
+                  <th>Total Stock</th>
+                  <th>Sold</th>
+                  <th>Left</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(stockOverviewQuery.data?.books ?? []).length === 0 && !stockOverviewQuery.isFetching && (
+                  <tr>
+                    <td colSpan={6}>No stock overview rows available.</td>
+                  </tr>
+                )}
+
+                {(stockOverviewQuery.data?.books ?? []).map((book, index) => {
+                  const bookKey = String(book.bookId ?? `stock-overview-${index + 1}`)
+
+                  return (
+                    <tr key={bookKey}>
+                      <td>{String(book.title ?? '-')}</td>
+                      <td>{String(book.author ?? '-')}</td>
+                      <td>{String(book.category ?? '-')}</td>
+                      <td>{toSafeNumber(book.totalStock)}</td>
+                      <td>{toSafeNumber(book.stockSold)}</td>
+                      <td>{toSafeNumber(book.stockLeft)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </section>
   )
 }

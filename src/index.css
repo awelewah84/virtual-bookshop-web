@@ -767,6 +767,61 @@ pre {
   margin-bottom: 0.85rem;
 }
 
+.reconciliation-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.9rem;
+}
+
+.report-tabs {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 1.1rem;
+}
+
+.report-tab {
+  border: 1px solid rgba(31, 35, 51, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+}
+
+.report-tab.active {
+  border-color: rgba(19, 92, 166, 0.35);
+  background: rgba(21, 79, 143, 0.12);
+  color: #154f8f;
+}
+
+.report-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.report-stat-card {
+  border: 1px solid rgba(31, 35, 51, 0.12);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.76);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.report-stat-card strong {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.report-stat-label {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
 .reconciliation-drilldown {
   border: 1px solid rgba(31, 35, 51, 0.14);
   border-radius: 10px;
