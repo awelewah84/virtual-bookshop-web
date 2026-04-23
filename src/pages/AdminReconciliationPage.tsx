@@ -358,6 +358,31 @@ export function AdminReconciliationPage() {
     queryFn: getStockSalesOverview,
   })
 
+  type StockOverviewSortKey = 'title' | 'author' | 'category' | 'totalStock' | 'stockSold' | 'stockLeft'
+  const [stockSort, setStockSort] = useState<{ key: StockOverviewSortKey; dir: 'asc' | 'desc' }>({ key: 'title', dir: 'asc' })
+
+  function handleStockSort(key: StockOverviewSortKey) {
+    setStockSort((prev) =>
+      prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
+    )
+  }
+
+  const sortedStockBooks = useMemo(() => {
+    const books = stockOverviewQuery.data?.books ?? []
+    const { key, dir } = stockSort
+    return [...books].sort((a, b) => {
+      const aVal = key === 'title' || key === 'author' || key === 'category'
+        ? String(a[key] ?? '').toLowerCase()
+        : toSafeNumber(a[key])
+      const bVal = key === 'title' || key === 'author' || key === 'category'
+        ? String(b[key] ?? '').toLowerCase()
+        : toSafeNumber(b[key])
+      if (aVal < bVal) return dir === 'asc' ? -1 : 1
+      if (aVal > bVal) return dir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [stockOverviewQuery.data?.books, stockSort])
+
   async function handleExport(): Promise<void> {
     try {
       setIsExporting(true)
@@ -711,22 +736,40 @@ export function AdminReconciliationPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Title</th>
-                  <th>Author</th>
-                  <th>Category</th>
-                  <th>Total Stock</th>
-                  <th>Sold</th>
-                  <th>Left</th>
+                  {(['title', 'author', 'category', 'totalStock', 'stockSold', 'stockLeft'] as const).map((col) => {
+                    const labels: Record<typeof col, string> = {
+                      title: 'Title',
+                      author: 'Author',
+                      category: 'Category',
+                      totalStock: 'Total Stock',
+                      stockSold: 'Sold',
+                      stockLeft: 'Left',
+                    }
+                    const isActive = stockSort.key === col
+                    return (
+                      <th
+                        key={col}
+                        className={`sortable-th${isActive ? ' sort-active' : ''}`}
+                        onClick={() => handleStockSort(col)}
+                        aria-sort={isActive ? (stockSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        {labels[col]}
+                        <span className="sort-indicator" aria-hidden="true">
+                          {isActive ? (stockSort.dir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                        </span>
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {(stockOverviewQuery.data?.books ?? []).length === 0 && !stockOverviewQuery.isFetching && (
+                {sortedStockBooks.length === 0 && !stockOverviewQuery.isFetching && (
                   <tr>
                     <td colSpan={6}>No stock overview rows available.</td>
                   </tr>
                 )}
 
-                {(stockOverviewQuery.data?.books ?? []).map((book, index) => {
+                {sortedStockBooks.map((book, index) => {
                   const bookKey = String(book.bookId ?? `stock-overview-${index + 1}`)
 
                   return (

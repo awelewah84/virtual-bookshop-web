@@ -773,6 +773,29 @@ pre {
   margin-bottom: 0.9rem;
 }
 
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable-th:hover {
+  background: rgba(31, 35, 51, 0.06);
+}
+
+.sortable-th.sort-active {
+  color: #154f8f;
+}
+
+.sort-indicator {
+  font-size: 0.75rem;
+  opacity: 0.55;
+}
+
+.sort-active .sort-indicator {
+  opacity: 1;
+}
+
 .report-tabs {
   display: flex;
   gap: 0.75rem;
